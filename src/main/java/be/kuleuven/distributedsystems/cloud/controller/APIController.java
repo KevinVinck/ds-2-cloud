@@ -61,7 +61,6 @@ public class APIController {
             @CookieValue(value = "cart", required = false) String cartString) throws Exception {
         List<Quote> cart = Cart.fromCookie(cartString);
         publisher.publishMessage(cartString);
-        this.model.confirmQuotes(new ArrayList<>(cart), AuthController.getUser().getEmail());
         cart.clear();
         ResponseCookie cookie = Cart.toCookie(cart);
         HttpHeaders headers = new HttpHeaders();

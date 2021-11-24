@@ -51,10 +51,6 @@ public class Model {
 
     public Show getShow(String company, UUID showId){
         System.out.println("in getshow");
-//        System.out.println(company);
-//        System.out.println(showId);
-//        System.out.println(String.format("https://%s", company));
-//        System.out.println(String.format("shows/%s", showId.toString()));
         // TODO hier moet je werken met retry's van de webclient???
 //        boolean stopperOn = false;
 //        while (!stopperOn){
@@ -79,11 +75,6 @@ public class Model {
 
 
     public List<LocalDateTime> getShowTimes(String company, UUID showId) {
-//        System.out.println(company);
-//        System.out.println(showId);
-//        System.out.println(String.format("https://%s", company));
-//        System.out.println(String.format("shows/%s", showId.toString()));
-
         WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
         var result = webClientBuilder.baseUrl(String.format("https://%s", company)).build().get()
                 .uri(uriBuilder -> uriBuilder.
@@ -96,8 +87,6 @@ public class Model {
     }
 
     public List<Seat> getAvailableSeats(String company, UUID showId, LocalDateTime time) {
-        System.out.println("1");
-
         System.out.println(company);
         System.out.println(showId);
         System.out.println(time);
@@ -117,37 +106,26 @@ public class Model {
     }
 
     public Seat getSeat(String company, UUID showId, UUID seatId) {
-        System.out.println("2");
         System.out.println(company);
         System.out.println(showId);
         System.out.println(String.format("https://%s", company));
         System.out.println(String.format("shows/%s", showId.toString()));
         System.out.println(String.format("seatid is /%s", seatId.toString()));
 
-
         WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
-
         var result = webClientBuilder.baseUrl(String.format("https://%s", company)).build().get()
                 .uri(uriBuilder -> uriBuilder.
                         pathSegment("shows/", showId.toString() + "/", "seats/", seatId.toString()).
                         queryParam("key", API_KEY).
                         build())
                 .retrieve().bodyToMono(new ParameterizedTypeReference<Seat>() {}).block();
-
-
         System.out.println(String.format("result is %s", result));
-
         return result;
 
     }
 
     public Ticket getTicket(String company, UUID showId, UUID seatId) {
-        System.out.println("3");
-
-
         WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
-
-
         var result = webClientBuilder.baseUrl(String.format("https://%s", company)).build().get()
                 .uri(uriBuilder -> uriBuilder.
                         pathSegment("shows/", showId.toString() + "/", "seats/", seatId.toString() + "/ticket").
@@ -155,30 +133,25 @@ public class Model {
                         build())
                 .retrieve().bodyToMono(new ParameterizedTypeReference<Ticket>() {}).block();
         System.out.println();
-
-
         return result;
     }
 
     public List<Booking> getBookings(String customer) {
         System.out.println(String.format("customer is %s", customer));
-        System.out.println("4");
-        return this.registeredBookings.get(customer);
+        return registeredBookings.get(customer);
     }
 
     public List<Booking> getAllBookings() {
-        System.out.println("5");
         List<Booking> result = new ArrayList<Booking>();
         this.registeredBookings.values().forEach(result::addAll);
         return result;
     }
 
     public Set<String> getBestCustomers() {
-        System.out.println("6");
         Set<String> best_customers = new HashSet<String>();
         int highest_nmb_tickets = 0;
 
-        for( String customer : this.registeredBookings.keySet()) {
+        for( String customer : registeredBookings.keySet()) {
             int number = 0;
             List<Booking> customerBookings = registeredBookings.get(customer);
             for(Booking booking: customerBookings){
@@ -196,37 +169,45 @@ public class Model {
     }
 
     public void confirmQuotes(List<Quote> quotes, String customer) {
-//        WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
-//
-//        ArrayList<Ticket> tickets = new ArrayList<>();
-//        quotes.forEach(q -> {
-//            var ticket = webClientBuilder.baseUrl(String.format("https://%s", q.getCompany())).build().put()
-//                    .uri(uriBuilder -> uriBuilder.
-//                            pathSegment("shows/", q.getShowId().toString(), "/seats/", q.getSeatId().toString(), "/ticket").
-//                            queryParam("key", API_KEY).
-//                            build())
-//                    .retrieve().bodyToMono(new ParameterizedTypeReference<Ticket>() {}).block();
-//            tickets.add(ticket);
-//        });
-        List<Ticket> allTickets = new ArrayList<Ticket>();
-        for(Quote q: quotes){
-            Ticket ticket = this.getTicket(q.getCompany(), q.getShowId(), q.getSeatId());
-            allTickets.add(ticket);
+        ArrayList<Ticket> tickets = new ArrayList<>();
+        try {
+            WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
+            quotes.forEach(q -> {
+                var ticket = webClientBuilder.baseUrl(String.format("https://%s", q.getCompany())).build().put()
+                        .uri(uriBuilder -> uriBuilder.
+                                pathSegment("shows/", q.getShowId().toString(), "/seats/", q.getSeatId().toString(), "/ticket").
+                                queryParam("customer", customer).
+                                queryParam("key", API_KEY).
+                                build())
+                        .retrieve().bodyToMono(new ParameterizedTypeReference<Ticket>() {}).retry(3).block();
+                tickets.add(ticket);
+            });
+        }catch(Exception e){
+            //When something goes wrong during the confirming of the quotes into tickets, delete the already booked tickets
+            System.out.println("Problem occured during the booking of the tickets");
+            deleteTickets(tickets);
         }
-        Booking newBooking = new Booking(UUID.randomUUID(), LocalDateTime.now(), allTickets, customer);
 
-        // TODO: hier moet pubsub tussen van kekke, all or nothing is dat je Bookings hebt
-        //  en Puts van de pubsub kan halen
-
-
+        Booking newBooking = new Booking(UUID.randomUUID(), LocalDateTime.now(), tickets, customer);
         List<Booking> newRegisteredBookings = new ArrayList<Booking>();
         newRegisteredBookings.add(newBooking);
-        newRegisteredBookings.addAll(this.registeredBookings.get(customer));
-        this.registeredBookings.put(customer, newRegisteredBookings);
+        if(registeredBookings.containsKey(customer)) {
+            newRegisteredBookings.addAll(registeredBookings.get(customer));
+        }
+        registeredBookings.put(customer, newRegisteredBookings);
+        // TODO: reserve all seats for the given quotes. Moet dit nog? Miguel enzo hebben ook dezelfde functie als die wij nu hebben
+    }
 
-        // TODO: reserve all seats for the given quotes
-        //quotes ook meegeven
-        ByteString customerByte = ByteString.copyFromUtf8(customer);
-        PubsubMessage pubsubMessage = PubsubMessage.newBuilder().setData(customerByte).build();
+    private void deleteTickets(List<Ticket> tickets){
+        WebClient.Builder webClientBuilder = (WebClient.Builder) context.getBean("webClientBuilder");
+        tickets.forEach(q -> {
+            var ticket = webClientBuilder.baseUrl(String.format("https://%s", q.getCompany())).build().delete()
+                    .uri(uriBuilder -> uriBuilder.
+                            pathSegment("shows/", q.getShowId().toString(), "/seats/", q.getSeatId().toString(), "/ticket", q.getTicketId().toString()).
+                            queryParam("key", API_KEY).
+                            build())
+                    .retrieve().bodyToMono(new ParameterizedTypeReference<Ticket>() {}).retry(5).block();
+        });
+        System.out.println("tickets deleted");
     }
 }

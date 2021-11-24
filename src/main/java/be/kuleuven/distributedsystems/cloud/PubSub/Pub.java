@@ -1,9 +1,11 @@
 package be.kuleuven.distributedsystems.cloud.PubSub;
 
+import be.kuleuven.distributedsystems.cloud.controller.AuthController;
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.core.CredentialsProvider;
 import com.google.api.gax.core.NoCredentialsProvider;
 import com.google.api.gax.grpc.GrpcTransportChannel;
+import com.google.api.gax.rpc.AlreadyExistsException;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.api.gax.rpc.TransportChannelProvider;
 import com.google.cloud.pubsub.v1.Publisher;
@@ -28,7 +30,7 @@ public class Pub {
     Publisher publisher;
 
     public Pub(){
-        System.out.println("Starting Publisher");
+        System.out.println("creating Publisher");
         initPublisher();
     }
 
@@ -42,32 +44,34 @@ public class Pub {
                                     .setCredentialsProvider(credentialsProvider)
                                     .build());
 
-            topicClient.deleteTopic(topicName);
             try{
                 topicClient.createTopic(topicName);
-            } catch (Exception e){
-                e.printStackTrace();
+            } catch (AlreadyExistsException e){
+                //e.printStackTrace();
             }
             this.publisher =
                     Publisher.newBuilder(topicName)
                             .setChannelProvider(channelProvider)
                             .setCredentialsProvider(credentialsProvider)
                             .build();
+            System.out.println("Publisher created");
         } catch (IOException e) {
             e.printStackTrace();
         }
     };
 
     public void publishMessage(String msg) {
-        ByteString message = ByteString.copyFromUtf8(msg);
+        System.out.println("in publish message");
+        ByteString data = ByteString.copyFromUtf8(msg);
         PubsubMessage pubsubMessage = PubsubMessage.newBuilder()
-                                            .setData(message)
+                                            .setData(data)
+                                            .putAttributes("user", AuthController.getUser().getEmail())
                                             .build();
         ApiFuture<String> publish = publisher.publish(pubsubMessage);
 
         try {
             String sent = publish.get();
-            System.out.println(sent);
+            System.out.println("Message number from pubsub: " + sent);
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         }

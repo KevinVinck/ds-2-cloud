@@ -3,6 +3,7 @@ package be.kuleuven.distributedsystems.cloud.PubSub;
 import com.google.api.gax.core.CredentialsProvider;
 import com.google.api.gax.core.NoCredentialsProvider;
 import com.google.api.gax.grpc.GrpcTransportChannel;
+import com.google.api.gax.rpc.AlreadyExistsException;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.api.gax.rpc.TransportChannelProvider;
 import com.google.cloud.pubsub.v1.*;
@@ -24,7 +25,7 @@ public class Sub {
     TopicName topicName = TopicName.of("demo-distributed-systems-kul", "ds-cloud-topic");
 
     public Sub(){
-        System.out.println("Started Subscriber");
+        System.out.println("creating Subscriber");
         initSubscriber();
     }
 
@@ -36,15 +37,17 @@ public class Sub {
                                     .setTransportChannelProvider(channelProvider)
                                     .setCredentialsProvider(credentialsProvider)
                                     .build());
-            ProjectSubscriptionName subscriptionName = ProjectSubscriptionName.of("demo-distributed-systems-kul", "ds-cloud-topic");
+            ProjectSubscriptionName subscriptionName = ProjectSubscriptionName.of("demo-distributed-systems-kul", "ds-cloud-subscription");
             PushConfig pushConfig = PushConfig.newBuilder()
                                         .setPushEndpoint("http://localhost:8080/pubsub/subscription")
                                         .build();
-
-            subscriptionClient.deleteSubscription(subscriptionName);
-            Subscription subscription = subscriptionClient.createSubscription(subscriptionName, topicName, pushConfig, 10);
-            System.out.println("created Sub");
-            System.out.println("Created push subscription: " + subscription.getName());
+            try {
+                Subscription subscription = subscriptionClient.createSubscription(subscriptionName, topicName, pushConfig, 10);
+                System.out.println("Subscriber created");
+                System.out.println("Created push subscription: " + subscription.getName());
+            } catch (AlreadyExistsException e){
+                //e.printStackTrace();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
