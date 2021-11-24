@@ -1,6 +1,9 @@
 package be.kuleuven.distributedsystems.cloud.controller;
 
 import be.kuleuven.distributedsystems.cloud.Model;
+import be.kuleuven.distributedsystems.cloud.PubSub.Pub;
+import be.kuleuven.distributedsystems.cloud.PubSub.PubSubController;
+import be.kuleuven.distributedsystems.cloud.PubSub.Sub;
 import be.kuleuven.distributedsystems.cloud.entities.Quote;
 import be.kuleuven.distributedsystems.cloud.entities.Seat;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +18,14 @@ import java.util.UUID;
 @RequestMapping("/api")
 public class APIController {
     private final Model model;
+    private final Pub publisher;
 
     @Autowired
     public APIController(Model model) {
         this.model = model;
+        this.publisher = new Pub();
+        new Sub();
+        new PubSubController(model);
     }
 
     @PostMapping(path = "/addToCart", consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE})
@@ -53,6 +60,7 @@ public class APIController {
     public ResponseEntity<Void> confirmCart(
             @CookieValue(value = "cart", required = false) String cartString) throws Exception {
         List<Quote> cart = Cart.fromCookie(cartString);
+        publisher.publishMessage(cartString);
         this.model.confirmQuotes(new ArrayList<>(cart), AuthController.getUser().getEmail());
         cart.clear();
         ResponseCookie cookie = Cart.toCookie(cart);
