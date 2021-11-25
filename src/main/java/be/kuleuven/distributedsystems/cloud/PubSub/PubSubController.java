@@ -7,6 +7,7 @@ import be.kuleuven.distributedsystems.cloud.entities.Quote;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.util.Base64;
 import java.util.List;
 
 @RestController
+@RequestMapping("/pubsub")
 public class PubSubController {
     private final Model model;
 
@@ -27,7 +29,7 @@ public class PubSubController {
     public void subscription(@RequestBody String body) throws IOException{
         //System.out.println("BODY" + body);
         ObjectMapper mapper = new ObjectMapper();
-        PubSubTransfer transfer = mapper.readValue(body, ObjectMapper.class);
+        PubSubTransfer transfer = mapper.readValue(body, PubSubTransfer.class);
         List<Quote> cart = Cart.fromCookie(new String(Base64.getDecoder().decode(transfer.message.data)));
         this.model.confirmQuotes(new ArrayList<>(cart), transfer.message.attributes.user);
     };
